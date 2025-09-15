@@ -79,21 +79,252 @@ graph TB
 
 2. **Deep Learning Model Architecture**
 
-   a. **Base Model: ResNet50**
-   - Pre-trained on ImageNet dataset
-   - 50 layers deep with residual connections
-   - Input shape: 224x224x3 (RGB images)
-   - Features:
-     * 5 stages of convolution blocks
-     * Identity shortcuts for gradient flow
-     * Batch normalization after each convolution
-     * Total params: ~23.5 million
+   a. **Base Model: ResNet50 Architecture**
+
+   ```mermaid
+   graph TD
+    subgraph ResNet50
+        Input[Input 224x224x3] --> Conv1
+        
+        subgraph Conv1
+            Conv1 --> |"7x7 conv, 64"| C1
+            C1 --> |"stride=2"| BN1[BatchNorm]
+            BN1 --> ReLU1[ReLU]
+            ReLU1 --> MP[MaxPool 3x3]
+        end
+        
+        subgraph Stage1[Stage 1 - Conv2_x]
+            MP --> |"× 3 blocks"| B1[Bottleneck Block]
+            B1 --> |"64-64-256"| B1Out
+        end
+        
+        subgraph Stage2[Stage 2 - Conv3_x]
+            B1Out --> |"× 4 blocks"| B2[Bottleneck Block]
+            B2 --> |"128-128-512"| B2Out
+        end
+        
+        subgraph Stage3[Stage 3 - Conv4_x]
+            B2Out --> |"× 6 blocks"| B3[Bottleneck Block]
+            B3 --> |"256-256-1024"| B3Out
+        end
+        
+        subgraph Stage4[Stage 4 - Conv5_x]
+            B3Out --> |"× 3 blocks"| B4[Bottleneck Block]
+            B4 --> |"512-512-2048"| B4Out
+        end
+        
+        B4Out --> AP[Average Pooling]
+        AP --> FC[Dense 8]
+        FC --> Output[Softmax]
+    end
+
+    subgraph BottleneckBlock[Bottleneck Block Structure]
+        BB_In[Input] --> Conv1x1_1[1x1 Conv]
+        Conv1x1_1 --> BN1_BB[BatchNorm]
+        BN1_BB --> ReLU1_BB[ReLU]
+        ReLU1_BB --> Conv3x3[3x3 Conv]
+        Conv3x3 --> BN2_BB[BatchNorm]
+        BN2_BB --> ReLU2_BB[ReLU]
+        ReLU2_BB --> Conv1x1_2[1x1 Conv]
+        Conv1x1_2 --> BN3_BB[BatchNorm]
+        BB_In --> |"Identity Shortcut"| Add((+))
+        BN3_BB --> Add
+        Add --> ReLU3_BB[ReLU]
+    end
+   ```
+
+   ```
+   ResNet50 Architecture:
    
-   b. **Model Adaptation**
-   - Transfer Learning Approach:
-     * Freezing initial layers (1-140)
-     * Fine-tuning later layers for domain-specific features
-     * Weights initialized from ImageNet
+   Input Layer [224×224×3]
+   └── Conv1
+       ├── Conv2D [7×7, 64 filters, stride=2]
+       ├── BatchNorm
+       ├── ReLU
+       └── MaxPool [3×3, stride=2]
+           └── Conv2_x (3 bottleneck blocks)
+               ├── [1×1, 64]
+               ├── [3×3, 64]
+               └── [1×1, 256]
+                   └── Conv3_x (4 bottleneck blocks)
+                       ├── [1×1, 128]
+                       ├── [3×3, 128]
+                       └── [1×1, 512]
+                           └── Conv4_x (6 bottleneck blocks)
+                               ├── [1×1, 256]
+                               ├── [3×3, 256]
+                               └── [1×1, 1024]
+                                   └── Conv5_x (3 bottleneck blocks)
+                                       ├── [1×1, 512]
+                                       ├── [3×3, 512]
+                                       └── [1×1, 2048]
+                                           └── Average Pooling
+                                               └── FC [8 classes]
+   ```
+
+   **Layer Details:**
+   1. **Initial Layers**
+      - Input: 224×224×3 RGB image
+      - Conv1: 7×7 conv, 64 filters, stride 2
+      - MaxPool: 3×3 max pool, stride 2
+      
+   2. **Residual Blocks**
+      - Conv2_x: 3× bottleneck blocks
+        * Input dim: 56×56×64
+        * Output dim: 56×56×256
+      - Conv3_x: 4× bottleneck blocks
+        * Input dim: 28×28×256
+        * Output dim: 28×28×512
+      - Conv4_x: 6× bottleneck blocks
+        * Input dim: 14×14×512
+        * Output dim: 14×14×1024
+      - Conv5_x: 3× bottleneck blocks
+        * Input dim: 7×7×1024
+        * Output dim: 7×7×2048
+
+   3. **Bottleneck Block Structure**
+      ```
+      Input
+      ├── 1×1 conv (reduce dimension)
+      ├── 3×3 conv
+      ├── 1×1 conv (restore dimension)
+      └── Add input (skip connection)
+      ```
+
+   4. **Key Features**
+      - Pre-trained on ImageNet (1M+ images)
+      - 50 layers deep with skip connections
+      - ~23.5 million trainable parameters
+      - Identity shortcuts every 2-3 layers
+      - Batch normalization after each conv
+      
+   5. **Modifications for Skin Disease**
+      - Removed final 1000-class layer
+      - Added custom classification head
+      - Fine-tuned later layers
+      - Frozen early layers (1-140)
+
+   ```mermaid
+   graph TD
+    classDef block fill:#f9f,stroke:#333,stroke-width:2px
+    classDef conv fill:#bbf,stroke:#333,stroke-width:2px
+    
+    Input[/"Input (224×224×3)"/] --> Conv1
+    Conv1["Conv1 (112×112×64)"] --> Pool["MaxPool (56×56×64)"]
+    
+    subgraph Stage1["Conv2_x (56×56×256)"]
+        Pool --> C2_1["Block1 (256)"]
+        C2_1 --> C2_2["Block2 (256)"]
+        C2_2 --> C2_3["Block3 (256)"]
+    end
+    
+    subgraph Stage2["Conv3_x (28×28×512)"]
+        C2_3 --> C3_1["Block1 (512)"]
+        C3_1 --> C3_2["Block2 (512)"]
+        C3_2 --> C3_3["Block3 (512)"]
+        C3_3 --> C3_4["Block4 (512)"]
+    end
+    
+    subgraph Stage3["Conv4_x (14×14×1024)"]
+        C3_4 --> C4_1["Block1 (1024)"]
+        C4_1 --> C4_2["Block2 (1024)"]
+        C4_2 --> C4_3["Block3 (1024)"]
+        C4_3 --> C4_4["Block4 (1024)"]
+        C4_4 --> C4_5["Block5 (1024)"]
+        C4_5 --> C4_6["Block6 (1024)"]
+    end
+    
+    subgraph Stage4["Conv5_x (7×7×2048)"]
+        C4_6 --> C5_1["Block1 (2048)"]
+        C5_1 --> C5_2["Block2 (2048)"]
+        C5_2 --> C5_3["Block3 (2048)"]
+    end
+    
+    C5_3 --> AvgPool["AvgPool (1×1×2048)"]
+    AvgPool --> FC["Dense (8)"]
+    FC --> Output["Softmax (8)"]
+    
+    class Conv1,Pool conv
+    class C2_1,C2_2,C2_3,C3_1,C3_2,C3_3,C3_4,C4_1,C4_2,C4_3,C4_4,C4_5,C4_6,C5_1,C5_2,C5_3 block
+   ```
+   
+   b. **Model Implementation Details**
+   
+   ```python
+   # ResNet50 Bottleneck Block Implementation
+   class BottleneckBlock(layers.Layer):
+       def __init__(self, filters, stride=1):
+           super().__init__()
+           self.conv1 = layers.Conv2D(filters, kernel_size=1, strides=1, padding='same')
+           self.bn1 = layers.BatchNormalization()
+           
+           self.conv2 = layers.Conv2D(filters, kernel_size=3, strides=stride, padding='same')
+           self.bn2 = layers.BatchNormalization()
+           
+           self.conv3 = layers.Conv2D(filters * 4, kernel_size=1, strides=1, padding='same')
+           self.bn3 = layers.BatchNormalization()
+           
+           if stride != 1 or filters * 4 != input_channels:
+               self.shortcut = Sequential([
+                   layers.Conv2D(filters * 4, kernel_size=1, strides=stride),
+                   layers.BatchNormalization()
+               ])
+           else:
+               self.shortcut = lambda x: x
+    
+       def call(self, inputs):
+           x = self.conv1(inputs)
+           x = self.bn1(x)
+           x = tf.nn.relu(x)
+           
+           x = self.conv2(x)
+           x = self.bn2(x)
+           x = tf.nn.relu(x)
+           
+           x = self.conv3(x)
+           x = self.bn3(x)
+           
+           shortcut = self.shortcut(inputs)
+           return tf.nn.relu(x + shortcut)
+   ```
+
+   **Transfer Learning Adaptation:**
+   1. Base Model Loading
+   ```python
+   base_model = ResNet50(
+       include_top=False,
+       weights='imagenet',
+       input_shape=(224, 224, 3),
+       pooling='avg'
+   )
+   
+   # Freeze early layers
+   for layer in base_model.layers[:140]:
+       layer.trainable = False
+   ```
+
+   2. Custom Head Addition
+   ```python
+   model = Sequential([
+       base_model,
+       Dense(512, activation='relu'),
+       BatchNormalization(),
+       Dropout(0.5),
+       Dense(256, activation='relu'),
+       BatchNormalization(),
+       Dropout(0.3),
+       Dense(8, activation='softmax')
+   ])
+   ```
+
+   3. Training Configuration
+   ```python
+   model.compile(
+       optimizer=Adam(learning_rate=0.001),
+       loss='categorical_crossentropy',
+       metrics=['accuracy', Precision(), Recall()]
+   )
+   ```
 
    c. **Custom Classification Head**
    ```python
